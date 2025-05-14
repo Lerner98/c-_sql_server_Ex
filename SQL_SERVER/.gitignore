@@ -1,0 +1,55 @@
+# Build results
+bin/
+obj/
+out/
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# VS Code
+.vscode/
+
+# Rider
+.idea/
+
+# Logs
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# ASP.NET-specific
+appsettings.Development.json
+appsettings.Local.json
+appsettings.*.json
+
+# Don’t commit secrets (REQUIRED)
+appsettings.json
+
+# Packages
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# Publish artifacts
+publish/
+*.pubxml
+*.Publish.xml
+
+# Auto-generated files
+Generated_Code/
+GeneratedFiles/
+
+# Test results
+TestResults/
+
+# Others
+*.db
+*.sqlite
+*.bak
