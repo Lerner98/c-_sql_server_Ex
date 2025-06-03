@@ -1,6 +1,7 @@
 const Constants = {
   // 🌐 API Base URL
-  API_URL: 'http://192.168.1.26:3000', // Hardcoded to the working URL
+  API_URL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
+
 
   // ⚙️ API Configuration
   API_TIMEOUT: 10000, // API request timeout in milliseconds (10 seconds)
