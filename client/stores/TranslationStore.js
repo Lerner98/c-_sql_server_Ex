@@ -63,7 +63,7 @@ const useTranslationStore = create((set, get) => ({
   clearTranslations: async (user) => {
     try {
       set({ isLoading: true, error: null });
-      const response = await ApiService.delete('/translations', user.signed_session_id);
+      const response = await ApiService.delete('/api/translations', user.signed_session_id); // ✅ FIXED: Added /api/ prefix
       if (!response.success) throw new Error(response.error);
 
       set({

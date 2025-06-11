@@ -10,8 +10,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { ActivityIndicator, StyleSheet } from 'react-native';
 import Constants from '../utils/Constants';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import AsyncStorageUtils from '../utils/AsyncStorage';
-import ApiService from '../services/ApiService';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
@@ -49,19 +47,8 @@ const RootLayoutInner = () => {
     }
   }, [sessionError, translationError]);
 
-  useEffect(() => {
-    const validateSession = async () => {
-      const token = await AsyncStorageUtils.getItem('signed_session_id');
-      if (!token) return;
-      const response = await ApiService.get('/validate-session', token);
-      if (!response.success) {
-        await AsyncStorageUtils.removeItem('signed_session_id');
-        await AsyncStorageUtils.removeItem('user');
-      }
-    };
-    const interval = setInterval(validateSession, Constants.SESSION.VALIDATION_INTERVAL);
-    return () => clearInterval(interval);
-  }, []);
+  // ✅ REMOVED: Redundant session validation - SessionProvider already handles this
+  // No need for duplicate validation in RootLayout
 
   const theme = isDarkMode ? DarkTheme : DefaultTheme;
 

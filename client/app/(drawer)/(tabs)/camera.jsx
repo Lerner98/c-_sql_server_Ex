@@ -204,86 +204,130 @@ const CameraTranslationScreen = () => {
     }
   }, [hasGalleryPermission, session, router, t]);
 
-  const processCapturedPhoto = useCallback(async (uri) => {
-    setIsProcessing(true);
-    setError('');
-    setLanguageError('');
-    try {
-      console.log('Converting image to base64:', uri);
-      const imageBase64 = await Helpers.fileToBase64(uri);
-      console.log('Image converted to base64, length:', imageBase64.length);
+const processCapturedPhoto = useCallback(async (uri) => {
+  setIsProcessing(true);
+  setError('');
+  setLanguageError('');
+  
+  // ✅ DEBUG: Check language values
+  console.log('🔍 Camera Debug - sourceLang:', sourceLang);
+  console.log('🔍 Camera Debug - targetLang:', targetLang);
+  console.log('🔍 Camera Debug - sourceLang type:', typeof sourceLang);
+  console.log('🔍 Camera Debug - targetLang type:', typeof targetLang);
+  console.log('🔍 Camera Debug - sourceLang empty?', !sourceLang || sourceLang.trim() === '');
+  console.log('🔍 Camera Debug - targetLang empty?', !targetLang || targetLang.trim() === '');
+  
+  // ✅ VALIDATION: Check if target language is set
+  if (!targetLang || targetLang.trim() === '') {
+    setError(t('error') + ': Target language is required. Please select a target language.');
+    setToastVisible(true);
+    setIsProcessing(false);
+    return;
+  }
+  
+  try {
+    console.log('Converting image to base64:', uri);
+    const imageBase64 = await Helpers.fileToBase64(uri);
+    console.log('Image converted to base64, length:', imageBase64.length);
 
-      console.log('Sending image to TranslationService.recognizeTextFromImage');
-      console.log('Session signed_session_id:', session?.signed_session_id);
-      const extractedTextResponse = await TranslationService.recognizeTextFromImage(imageBase64, session?.signed_session_id);
-      console.log('Extracted text response:', extractedTextResponse);
-      if (!extractedTextResponse || !extractedTextResponse.text) {
-        setOriginalText('');
-        setTranslatedText('');
-        setError(t('error') + ': ' + ERROR_MESSAGES.CAMERA_NO_TEXT_DETECTED);
-        setToastVisible(true);
-        return;
-      }
-
-      const extractedText = extractedTextResponse.text;
-      console.log('Extracted text:', extractedText);
-
-      console.log('Detecting language with TranslationService.detectLanguage');
-      const detectResponse = await TranslationService.detectLanguage(extractedText, session?.signed_session_id);
-      console.log('Detected language response:', detectResponse);
-      const detectedLang = detectResponse.detectedLang;
-
-      let translatedText;
-      if (sourceLang !== 'auto' && detectedLang !== sourceLang) {
-        setOriginalText(extractedText);
-        setTranslatedText(extractedText);
-        setLanguageError(`The text appears to be in ${detectedLang}, but the source language was set to ${sourceLang}. Please select the correct source language.`);
-      } else if (detectedLang === targetLang) {
-        setOriginalText(extractedText);
-        setTranslatedText(extractedText);
-      } else {
-        console.log('Translating text with TranslationService.translateText', { extractedText, targetLang, detectedLang });
-        const translationResponse = await TranslationService.translateText(
-          extractedText,
-          targetLang,
-          detectedLang,
-          session?.signed_session_id
-        );
-        console.log('Translation response:', translationResponse);
-        translatedText = translationResponse.translatedText;
-        setOriginalText(extractedText);
-        setTranslatedText(translatedText);
-      }
-
-      setTranslationData({
-        id: Date.now().toString(),
-        fromLang: detectedLang,
-        toLang: targetLang,
-        original_text: extractedText,
-        translated_text: translatedText || extractedText,
-        created_at: new Date().toISOString(),
-        type: 'camera',
-        imageUri: uri,
-      });
-    } catch (err) {
-      console.error('Camera translation error:', err);
-      console.error('Error details:', err.message, err.stack);
-      let errorMessage = t('error') + ': ' + ERROR_MESSAGES.CAMERA_PROCESS_FAILED;
-      if (err.message) {
-        if (err.message.includes('Network error')) {
-          errorMessage = t('error') + ': ' + ERROR_MESSAGES.CAMERA_NETWORK_ERROR;
-        } else if (err.message.includes('No text detected')) {
-          errorMessage = t('error') + ': ' + ERROR_MESSAGES.CAMERA_NO_TEXT_DETECTED;
-        } else {
-          errorMessage = t('error') + ': ' + ERROR_MESSAGES.CAMERA_PROCESS_FAILED + ` (${err.message})`;
-        }
-      }
-      setError(errorMessage);
+    console.log('Sending image to TranslationService.recognizeTextFromImage');
+    console.log('Session signed_session_id:', session?.signed_session_id);
+    const extractedTextResponse = await TranslationService.recognizeTextFromImage(imageBase64, session?.signed_session_id);
+    console.log('Extracted text response:', extractedTextResponse);
+    
+    if (!extractedTextResponse || !extractedTextResponse.text) {
+      setOriginalText('');
+      setTranslatedText('');
+      setError(t('error') + ': ' + ERROR_MESSAGES.CAMERA_NO_TEXT_DETECTED);
       setToastVisible(true);
-    } finally {
-      setIsProcessing(false);
+      return;
     }
-  }, [session, sourceLang, targetLang, t]);
+
+    let extractedText = extractedTextResponse.text;
+    console.log('Raw extracted text:', extractedText);
+
+    // ✅ Clean up common OCR prefixes/suffixes
+    extractedText = extractedText
+      .replace(/^(The text says?:?\s*["""]?|Text in the image:?\s*["""]?)/i, '')
+      .replace(/["""]$/, '')
+      .replace(/^["""]/, '')
+      .trim();
+
+    console.log('Cleaned extracted text:', extractedText);
+
+    console.log('Detecting language with TranslationService.detectLanguage');
+    const detectResponse = await TranslationService.detectLanguage(extractedText, session?.signed_session_id);
+    console.log('Detected language response:', detectResponse);
+    const detectedLang = detectResponse.detectedLang;
+
+    // ✅ FIXED: Improved language validation logic
+    let translatedText;
+    let finalSourceLang = sourceLang;
+
+    // If source language is empty, auto, or not set, use detected language
+    if (!sourceLang || sourceLang === 'auto' || sourceLang.trim() === '') {
+      finalSourceLang = detectedLang;
+      console.log('Using detected language as source:', detectedLang);
+    }
+    // If source language is set but doesn't match detected language, show warning but continue
+    else if (finalSourceLang !== detectedLang) {
+      console.log(`Language mismatch: set to ${finalSourceLang}, detected ${detectedLang}`);
+      setLanguageError(`The text appears to be in ${detectedLang}, but the source language was set to ${finalSourceLang}. Translation will proceed with detected language.`);
+      finalSourceLang = detectedLang; // Use detected language for translation
+    }
+
+    // If detected language is the same as target language, no translation needed
+    if (detectedLang === targetLang) {
+      setOriginalText(extractedText);
+      setTranslatedText(extractedText);
+    } else {
+      console.log('Translating text with TranslationService.translateText', { 
+        extractedText, 
+        targetLang, 
+        detectedLang: finalSourceLang 
+      });
+      
+      const translationResponse = await TranslationService.translateText(
+        extractedText,
+        targetLang,
+        finalSourceLang,
+        session?.signed_session_id
+      );
+      console.log('Translation response:', translationResponse);
+      translatedText = translationResponse.translatedText;
+      setOriginalText(extractedText);
+      setTranslatedText(translatedText);
+    }
+
+    setTranslationData({
+      id: Date.now().toString(),
+      fromLang: finalSourceLang, // ✅ Use the final determined source language
+      toLang: targetLang,
+      original_text: extractedText,
+      translated_text: translatedText || extractedText,
+      created_at: new Date().toISOString(),
+      type: 'camera',
+      imageUri: uri,
+    });
+  } catch (err) {
+    console.error('Camera translation error:', err);
+    console.error('Error details:', err.message, err.stack);
+    let errorMessage = t('error') + ': ' + ERROR_MESSAGES.CAMERA_PROCESS_FAILED;
+    if (err.message) {
+      if (err.message.includes('Network error')) {
+        errorMessage = t('error') + ': ' + ERROR_MESSAGES.CAMERA_NETWORK_ERROR;
+      } else if (err.message.includes('No text detected')) {
+        errorMessage = t('error') + ': ' + ERROR_MESSAGES.CAMERA_NO_TEXT_DETECTED;
+      } else {
+        errorMessage = t('error') + ': ' + ERROR_MESSAGES.CAMERA_PROCESS_FAILED + ` (${err.message})`;
+      }
+    }
+    setError(errorMessage);
+    setToastVisible(true);
+  } finally {
+    setIsProcessing(false);
+  }
+}, [session, sourceLang, targetLang, t]);
 
   const handleSaveTranslation = useCallback(async () => {
     if (!translationData) {

@@ -27,6 +27,7 @@ Thumbs.db
 appsettings.Development.json
 appsettings.Local.json
 appsettings.*.json
+appsettings.json
 
 # Don’t commit secrets (REQUIRED)
 appsettings.json

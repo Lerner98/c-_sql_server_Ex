@@ -98,6 +98,7 @@ const TextVoiceInput = React.memo(({ t, isDarkMode, session, sourceLang, setSour
     setToastVisible(false);
   }, [error]);
 
+
   useEffect(() => {
     const checkAndRequestAudioPermission = async () => {
       try {
@@ -469,40 +470,40 @@ const TextVoiceInput = React.memo(({ t, isDarkMode, session, sourceLang, setSour
     }
   };
 
-  const stopRecording = async () => {
-    if (!recording) {
-      console.log('No recording to stop');
-      setIsRecording(false);
+const stopRecording = async () => {
+  if (!recording) {
+    console.log('No recording to stop');
+    setIsRecording(false);
+    setIsLoading(false);
+    return;
+  }
+
+  setIsRecording(false);
+  setIsLoading(true);
+  setError('');
+
+  try {
+    console.log('Stopping recording...');
+    await recording.stopAndUnloadAsync();
+    const status = await recording.getStatusAsync();
+    console.log('Recording status:', status);
+
+    if (!status || status.durationMillis < 1000) {
+      setError(t('error') + ': ' + Constants.ERROR_MESSAGES.TRANSLATION_RECORDING_TOO_SHORT);
+      setToastVisible(true);
+      setRecording(null);
       setIsLoading(false);
       return;
     }
 
-    setIsRecording(false);
-    setIsLoading(true);
-    setError('');
-
-    try {
-      console.log('Stopping recording...');
-      await recording.stopAndUnloadAsync();
-      const status = await recording.getStatusAsync();
-      console.log('Recording status:', status);
-
-      if (!status || status.durationMillis < 1000) {
-        setError(t('error') + ': ' + Constants.ERROR_MESSAGES.TRANSLATION_RECORDING_TOO_SHORT);
-        setToastVisible(true);
-        setRecording(null);
-        setIsLoading(false);
-        return;
-      }
-
-      const uri = recording.getURI();
-      if (!uri || !uri.startsWith('file://')) {
-        setError(t('error') + ': ' + Constants.ERROR_MESSAGES.TRANSLATION_INVALID_AUDIO_PATH);
-        setToastVisible(true);
-        setRecording(null);
-        setIsLoading(false);
-        return;
-      }
+    const uri = recording.getURI();
+    if (!uri || !uri.startsWith('file://')) {
+      setError(t('error') + ': ' + Constants.ERROR_MESSAGES.TRANSLATION_INVALID_AUDIO_PATH);
+      setToastVisible(true);
+      setRecording(null);
+      setIsLoading(false);
+      return;
+    }
 
       console.log('Preparing FormData for upload...');
       const formData = new FormData();
@@ -514,7 +515,7 @@ const TextVoiceInput = React.memo(({ t, isDarkMode, session, sourceLang, setSour
       formData.append('sourceLang', sourceLang);
 
       console.log('Uploading file to server...');
-      const response = await fetch(`${API_URL}/speech-to-text`, {
+      const response = await fetch(`${API_URL}/api/tools/speech-to-text`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${session?.signed_session_id}`,
@@ -721,6 +722,23 @@ const TextVoiceTranslationScreen = () => {
   useEffect(() => {
     console.log("TOKEN:", session?.signed_session_id);
   }, []);
+
+  useEffect(() => {
+  console.log('🔍 Translation History Debug:');
+  console.log('🔍 Session exists:', !!session);
+  console.log('🔍 recentTextTranslations:', recentTextTranslations);
+  console.log('🔍 recentVoiceTranslations:', recentVoiceTranslations);
+  console.log('🔍 guestTranslations:', guestTranslations);
+  console.log('🔍 Final recentTranslations:', recentTranslations);
+  
+  // Check the structure of the first item
+  if (recentTranslations.length > 0) {
+    console.log('🔍 First translation item structure:', recentTranslations[0]);
+    console.log('🔍 First translation fields:', Object.keys(recentTranslations[0]));
+    console.log('🔍 First translation ID:', recentTranslations[0].id);
+    console.log('🔍 First translation type:', typeof recentTranslations[0].id);
+  }
+}, [session, recentTextTranslations, recentVoiceTranslations, guestTranslations, recentTranslations]);
 
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? Constants.SCREEN.BACKGROUND_COLOR_DARK : Constants.COLORS.BACKGROUND }]}>

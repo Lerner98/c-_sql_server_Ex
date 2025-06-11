@@ -1,7 +1,6 @@
 const Constants = {
   // 🌐 API Base URL
-  API_URL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
-
+  API_URL: 'http://192.168.1.26:5400', // Hardcoded to the working URL
 
   // ⚙️ API Configuration
   API_TIMEOUT: 10000, // API request timeout in milliseconds (10 seconds)
@@ -239,18 +238,19 @@ const Constants = {
   },
 
   // 🌐 API Endpoints
+  // In Constants.js, update API_ENDPOINTS:
   API_ENDPOINTS: {
-    TRANSLATIONS_TEXT: '/translations/text', // Endpoint for text translations
-    TRANSLATIONS_VOICE: '/translations/voice', // Endpoint for voice translations
-    TRANSLATE: '/translate', // Endpoint for text translation and detection
-    TRANSLITERATE: '/transliterate', // Endpoint for transliteration
-    SPEECH_TO_TEXT: '/speech-to-text', // Endpoint for speech-to-text
-    TEXT_TO_SPEECH: '/text-to-speech', // Endpoint for text-to-speech
-    RECOGNIZE_TEXT: '/recognize-text', // Endpoint for image-to-text recognition
-    RECOGNIZE_ASL: '/recognize-asl', // Endpoint for ASL recognition
-    LANGUAGES: '/languages', // Endpoint for language search
-    EXTRACT_TEXT: '/extract-text', // Endpoint for text extraction from files
-    GENERATE_DOCX: '/generate-docx', // Endpoint for generating Word documents
+    TRANSLATIONS_TEXT: '/api/translations/text',
+    TRANSLATIONS_VOICE: '/api/translations/voice',
+    TRANSLATE: '/api/tools/translate',
+    TRANSLITERATE: '/api/tools/transliterate',
+    SPEECH_TO_TEXT: '/api/tools/speech-to-text',
+    TEXT_TO_SPEECH: '/api/tools/text-to-speech',
+    RECOGNIZE_TEXT: '/api/tools/recognize-text',
+    RECOGNIZE_ASL: '/api/tools/recognize-asl',
+    LANGUAGES: '/api/languages', 
+    EXTRACT_TEXT: '/api/tools/extract-text',
+    GENERATE_DOCX: '/api/tools/generate-docx',
   },
 
   // 🎨 Theme Modes

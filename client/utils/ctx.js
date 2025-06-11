@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
 import AsyncStorageUtils from './AsyncStorage';
 import ApiService from '../services/ApiService';
@@ -6,7 +6,6 @@ import Helpers from './Helpers';
 import { router } from 'expo-router';
 import Constants from './Constants';
 import * as Localization from 'expo-localization';
-
 
 const DEFAULT_CONSTANTS = {
   ROUTES: {
@@ -20,15 +19,10 @@ const DEFAULT_CONSTANTS = {
     DEFAULT_FROM_LANG: 'en',
     DEFAULT_TO_LANG: 'he',
   },
-  SESSION: {
-    VALIDATION_INTERVAL: 15000, // Default to 15 seconds
-  },
 };
 
-// Ensure SESSION is always defined
 const ROUTES = Constants?.ROUTES || DEFAULT_CONSTANTS.ROUTES;
 const DEFAULT_PREFERENCES = Constants?.DEFAULT_PREFERENCES || DEFAULT_CONSTANTS.DEFAULT_PREFERENCES;
-const SESSION = Constants?.SESSION || DEFAULT_CONSTANTS.SESSION;
 
 const SessionContext = createContext({
   session: null,
@@ -46,7 +40,6 @@ const SessionContext = createContext({
   register: async () => {},
   setPreferences: async () => {},
   clearError: () => {},
-  isLoggingIn: false,
 });
 
 export const SessionProvider = ({ children }) => {
@@ -58,135 +51,172 @@ export const SessionProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [lastLoginTime, setLastLoginTime] = useState(null);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [hasLoggedIn, setHasLoggedIn] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
 
   const clearError = () => {
     setError(null);
   };
 
   useEffect(() => {
+    if (pendingNavigation && !isLoading && !isAuthLoading) {
+      console.log('[SessionProvider] Executing pending navigation to:', pendingNavigation);
+      router.replace(pendingNavigation);
+      setPendingNavigation(null);
+    }
+  }, [pendingNavigation, isLoading, isAuthLoading]);
+
+  useEffect(() => {
     const initialize = async () => {
       try {
+        console.log('[SessionProvider] 🚀 Starting initialization...');
         setIsLoading(true);
         setError(null);
 
         const userData = await AsyncStorageUtils.getItem('user');
         const token = await AsyncStorageUtils.getItem('signed_session_id');
-        let preferencesData = null;
+        let preferencesData = await AsyncStorageUtils.getItem('preferences');
 
-        if (userData && userData.id && token) {
-          const response = await ApiService.get('/validate-session', token);
-          if (response.success) {
-            setSession({ ...userData, signed_session_id: token });
-            preferencesData = await AsyncStorageUtils.getItem('preferences');
-          } else {
+        console.log('[SessionProvider] 📊 Stored data check:', {
+          hasUserData: !!userData,
+          hasUserId: !!userData?.id,
+          hasToken: !!token,
+          tokenLength: token?.length,
+          hasLoggedIn: hasLoggedIn,
+        });
+
+        // ✅ SIMPLIFIED: If hasLoggedIn is true and token exists, restore session without validation
+        if (hasLoggedIn && userData?.id && token) {
+          console.log('[SessionProvider] ✅ Restoring session for logged-in user');
+          setSession({ ...userData, signed_session_id: token });
+          setPendingNavigation(ROUTES.MAIN);
+        }
+        // Only validate session if not previously logged in
+        else if (userData?.id && token && !hasLoggedIn) {
+          console.log('[SessionProvider] 🔍 Found stored session, validating...');
+          
+          try {
+            console.log('[SessionProvider] 📡 Calling validation endpoint...');
+            const response = await ApiService.get('/api/auth/validate-session', token);
+            
+            console.log('[SessionProvider] 📨 Validation response:', {
+              success: response.success,
+              hasData: !!response.data,
+              error: response.error
+            });
+            
+            if (response.success) {
+              console.log('[SessionProvider] ✅ Session is valid, restoring user');
+              setSession({ ...userData, signed_session_id: token });
+              setHasLoggedIn(true);
+              setPendingNavigation(ROUTES.MAIN);
+            } else {
+              console.log('[SessionProvider] ❌ Session expired, clearing data');
+              await resetSession();
+            }
+          } catch (validationError) {
+            console.log('[SessionProvider] 💥 Session validation threw error:', validationError.message);
             await resetSession();
-            preferencesData = await AsyncStorageUtils.getItem('preferences');
           }
         } else {
+          console.log('[SessionProvider] ℹ️ No session data found');
           await resetSessionButKeepPreferences();
-          preferencesData = await AsyncStorageUtils.getItem('preferences');
         }
 
-        if (preferencesData) setPreferencesState(preferencesData);
+        if (preferencesData) {
+          console.log('[SessionProvider] 🎯 Loading preferences');
+          setPreferencesState(preferencesData);
+        }
+
       } catch (err) {
+        console.error('[SessionProvider] 💥 Initialization error:', err);
         setError(Helpers.handleError(err));
         await resetSessionButKeepPreferences();
       } finally {
+        console.log('[SessionProvider] 🏁 Initialization complete');
         setIsLoading(false);
       }
     };
-    initialize();
-  }, []);
 
-  useEffect(() => {
-    const validateSession = async () => {
-      try {
-        const token = await AsyncStorageUtils.getItem('signed_session_id');
-        if (!token) {
-          return;
-        }
-
-        const response = await ApiService.get('/validate-session', token);
-        console.log('Session validation response:', response);
-
-        if (!response.success) {
-          const now = Date.now();
-          if (lastLoginTime && now - lastLoginTime < 30000) {
-            console.warn('Session validation failed shortly after login, ignoring...');
-            return;
-          }
-          if (isLoggingIn) {
-            console.warn('Session validation failed during login attempt, skipping navigation...');
-            await resetSession();
-            return;
-          }
-          console.warn('Session expired or invalid. Resetting...');
-          await resetSession();
-          router.replace(ROUTES.WELCOME);
-        }
-      } catch (err) {
-        console.error('Error during session validation:', err);
-      }
-    };
-
-    const timer = setTimeout(() => {
-      validateSession();
-      const interval = setInterval(validateSession, SESSION.VALIDATION_INTERVAL);
-      return () => clearInterval(interval);
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [lastLoginTime, isLoggingIn]);
+    const timeoutId = setTimeout(initialize, 100);
+    return () => clearTimeout(timeoutId);
+  }, [hasLoggedIn]);
 
   const resetSession = async () => {
+    console.log('[SessionProvider] 🗑️ Resetting complete session');
     await AsyncStorageUtils.removeItem('user');
     await AsyncStorageUtils.removeItem('signed_session_id');
     await AsyncStorageUtils.removeItem('preferences');
-
     setSession(null);
     setPreferencesState({ defaultFromLang: null, defaultToLang: null });
+    setHasLoggedIn(false);
   };
 
   const resetSessionButKeepPreferences = async () => {
+    console.log('[SessionProvider] 🗑️ Resetting session but keeping preferences');
+    const token = await AsyncStorageUtils.getItem('signed_session_id');
+    const userData = await AsyncStorageUtils.getItem('user');
+    
+    if (token && userData?.id && session) {
+      console.log('[SessionProvider] 🔒 Active session detected, preserving session state');
+      return;
+    }
+
+    await AsyncStorageUtils.removeItem('user');
     await AsyncStorageUtils.removeItem('signed_session_id');
     setSession(null);
   };
 
   const signIn = async (email, password) => {
     try {
-      setIsLoggingIn(true);
       setIsAuthLoading(true);
       setError(null);
 
-      const response = await ApiService.post('/login', { email, password });
+      console.log('[SessionProvider] 🔐 Signing in user:', email);
+      const response = await ApiService.post('/api/auth/login', { email, password });
 
-      if (!response.success || !response.data || !response.data.token || !response.data.user) {
+      console.log('[SessionProvider] 📨 Login response:', {
+        success: response.success,
+        hasData: !!response.data,
+        hasToken: !!response.data?.token,
+        hasUser: !!response.data?.user,
+        error: response.error
+      });
+
+      if (!response.success || !response.data?.token || !response.data?.user) {
         throw new Error(response?.error || 'Login failed');
       }
 
       const { user, token } = response.data;
 
+      console.log('[SessionProvider] 💾 Storing session data...');
       await AsyncStorageUtils.setItem('user', user);
       await AsyncStorageUtils.setItem('signed_session_id', token);
 
+      console.log('[SessionProvider] 🎯 Updating state...');
       setSession({ ...user, signed_session_id: token });
-      setPreferencesState({
-        defaultFromLang: user.defaultFromLang || null,
-        defaultToLang: user.defaultToLang || null,
-      });
 
-      setLastLoginTime(Date.now());
-      router.replace(ROUTES.MAIN);
+      // ✅ Reset preferences for logged-in user
+      const deviceLocale = Localization.locale.split('-')[0];
+      const defaultPrefs = {
+        defaultFromLang: user.defaultFromLang || deviceLocale || DEFAULT_PREFERENCES.DEFAULT_FROM_LANG || 'en',
+        defaultToLang: user.defaultToLang || (deviceLocale === 'he' ? 'en' : DEFAULT_PREFERENCES.DEFAULT_TO_LANG || 'he'),
+      };
+      await AsyncStorageUtils.setItem('preferences', defaultPrefs);
+      setPreferencesState(defaultPrefs);
+
+      console.log('[SessionProvider] ✅ Sign in successful, navigating...');
+      setHasLoggedIn(true);
+      setPendingNavigation(ROUTES.MAIN);
+
     } catch (err) {
+      console.error('[SessionProvider] 💥 Sign in failed:', err);
       await resetSessionButKeepPreferences();
       const msg = Helpers.handleError(err);
       setError(msg);
       throw new Error(msg);
     } finally {
       setIsAuthLoading(false);
-      setIsLoggingIn(false);
     }
   };
 
@@ -195,16 +225,28 @@ export const SessionProvider = ({ children }) => {
       setIsAuthLoading(true);
       setError(null);
 
+      console.log('[SessionProvider] 🚪 Signing out user');
       const token = await AsyncStorageUtils.getItem('signed_session_id');
-      const response = await ApiService.post('/logout', {}, token);
-      if (!response.success) throw new Error(response.error || 'Logout failed');
+      
+      if (token) {
+        try {
+          await ApiService.post('/api/auth/logout', {}, token);
+          console.log('[SessionProvider] 📡 Server logout successful');
+        } catch (logoutError) {
+          console.warn('[SessionProvider] ⚠️ Server logout failed, continuing with local cleanup');
+        }
+      }
 
       await resetSession();
       router.replace(ROUTES.WELCOME);
+      console.log('[SessionProvider] ✅ Sign out successful');
+
     } catch (err) {
+      console.error('[SessionProvider] 💥 Sign out error:', err);
       const msg = Helpers.handleError(err);
       setError(msg);
-      throw new Error(msg);
+      await resetSession();
+      router.replace(ROUTES.WELCOME);
     } finally {
       setIsAuthLoading(false);
     }
@@ -215,17 +257,25 @@ export const SessionProvider = ({ children }) => {
       setIsAuthLoading(true);
       setError(null);
 
-      const response = await ApiService.post('/register', { email, password });
-      if (!response.success) throw new Error(response.error || 'Registration failed');
+      console.log('[SessionProvider] 📝 Registering user:', email);
+      const response = await ApiService.post('/api/auth/register', { email, password });
+      
+      if (!response.success) {
+        throw new Error(response.error || 'Registration failed');
+      }
 
-      const deviceLocale = Localization.locale.split('-')[0]; // e.g., 'en-US' -> 'en'
+      const deviceLocale = Localization.locale.split('-')[0];
       const defaultPrefs = {
         defaultFromLang: deviceLocale || DEFAULT_PREFERENCES.DEFAULT_FROM_LANG || 'en',
         defaultToLang: deviceLocale === 'he' ? 'en' : DEFAULT_PREFERENCES.DEFAULT_TO_LANG || 'he',
       };
+      
       await AsyncStorageUtils.setItem('preferences', defaultPrefs);
       setPreferencesState(defaultPrefs);
+      console.log('[SessionProvider] ✅ Registration successful');
+
     } catch (err) {
+      console.error('[SessionProvider] 💥 Registration failed:', err);
       const msg = Helpers.handleError(err);
       setError(msg);
       throw new Error(msg);
@@ -244,12 +294,16 @@ export const SessionProvider = ({ children }) => {
 
       if (token && user?.id) {
         const response = await ApiService.post('/preferences', prefs, token);
-        if (!response.success) throw new Error(response.error || 'Failed to update preferences');
+        if (!response.success) {
+          throw new Error(response.error || 'Failed to update preferences');
+        }
       }
 
       await AsyncStorageUtils.setItem('preferences', prefs);
       setPreferencesState(prefs);
+
     } catch (err) {
+      console.error('[SessionProvider] 💥 Set preferences failed:', err);
       const msg = Helpers.handleError(err);
       setError(msg);
       throw new Error(msg);
@@ -271,8 +325,7 @@ export const SessionProvider = ({ children }) => {
     register,
     setPreferences,
     clearError,
-    isLoggingIn,
-  }), [session, preferences, isLoading, isAuthLoading, error, isLoggingIn]);
+  }), [session, preferences, isLoading, isAuthLoading, error]);
 
   return (
     <SessionContext.Provider value={contextValue}>

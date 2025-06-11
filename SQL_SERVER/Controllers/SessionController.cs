@@ -16,17 +16,18 @@ namespace SQL_SERVER.Controllers
         }
 
         [HttpGet("validate")]
-        public IActionResult ValidateSession([FromHeader(Name = "Authorization")] string token)
+        public IActionResult ValidateSession([FromHeader(Name = "Authorization")] string? token)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(token))
                     return BadRequest(new { error = "Token is required." });
 
-                var user = _authService.ValidateSession(token);
+                // Clean the token (remove "Bearer " prefix if present)
+                string cleanToken = token.StartsWith("Bearer ") ? token.Substring(7) : token;
+                var user = _authService.ValidateSession(cleanToken);
                 if (user == null)
                     return Unauthorized(new { error = "Invalid session." });
-
                 return Ok(new { success = true, user });
             }
             catch (Exception ex)
@@ -36,14 +37,16 @@ namespace SQL_SERVER.Controllers
         }
 
         [HttpPost("logout")]
-        public IActionResult Logout([FromHeader(Name = "Authorization")] string token)
+        public IActionResult Logout([FromHeader(Name = "Authorization")] string? token)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(token))
                     return BadRequest(new { error = "Token is required." });
 
-                _authService.Logout(token);
+                // Clean the token (remove "Bearer " prefix if present)
+                string cleanToken = token.StartsWith("Bearer ") ? token.Substring(7) : token;
+                _authService.Logout(cleanToken);
                 return Ok(new { success = true });
             }
             catch (Exception ex)

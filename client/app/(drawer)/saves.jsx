@@ -142,7 +142,7 @@ const SavesScreen = () => {
                 if (translation) {
                   console.log('Deleting translation from server for id:', id);
                   console.log('Session token:', session.signed_session_id);
-                  const response = await ApiService.delete(`/translations/delete/${id}`, session.signed_session_id, { timeout: 10000 });
+                  const response = await ApiService.delete(`/api/translations/delete/${id}`, session.signed_session_id, { timeout: 10000 });
                   if (!response.success) {
                     throw new Error(response.error || ERROR_MESSAGES.SAVES_DELETE_SERVER_FAILED);
                   }

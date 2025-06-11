@@ -10,10 +10,10 @@ using SQL_SERVER.Helpers;
 namespace SQL_SERVER.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/tools")]
     public class ExtractTextController : ControllerBase
     {
-        [HttpPost]
+        [HttpPost("extract-text")]
         public IActionResult Extract([FromHeader(Name = "Authorization")] string token, [FromBody] dynamic body)
         {
             var user = TranslationService.ValidateSessionAndExtract(token);

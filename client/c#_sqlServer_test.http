@@ -1,5 +1,5 @@
 ### ✅ Login user (POST)
-POST http://localhost:5256/api/auth/login
+POST http://localhost:5400/api/auth/login
 Content-Type: application/json
 
 {
@@ -10,7 +10,7 @@ Content-Type: application/json
 ### result will be 500 internal server error because of this
 
 ### ✅ Register user (POST)
-POST http://localhost:5256/api/auth/register
+POST http://localhost:5400/api/auth/register
 Content-Type: application/json
 
 {

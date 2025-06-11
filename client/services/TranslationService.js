@@ -175,6 +175,7 @@ const TranslationService = {
    * @throws {Error} If the search fails.
    */
   searchLanguages: async (query = '*') => {
+    console.log('[TranslationService] searchLanguages called with query:', query);
     const url = `${API_ENDPOINTS.LANGUAGES}?query=${encodeURIComponent(query)}`;
     const response = await ApiService.get(url, null);
     if (response.success && response.data) {

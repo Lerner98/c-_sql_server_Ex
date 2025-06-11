@@ -139,5 +139,36 @@ namespace SQL_SERVER.Services
             using var doc = JsonDocument.Parse(responseBody);
             return doc.RootElement.GetProperty("text").GetString();
         }
+
+        public async Task<string> RecognizeASLFromImage(string base64Image)
+        {
+            var payload = new
+            {
+                model = "gpt-4o",
+                messages = new object[]
+                {
+            new { role = "user", content = new object[]
+                {
+                    new { type = "text", text = "Interpret the American Sign Language (ASL) gesture in this image and provide the corresponding English word or phrase." },
+                    new { type = "image_url", image_url = new { url = $"data:image/jpeg;base64,{base64Image}" } }
+                }
+            }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(payload);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("https://api.openai.com/v1/chat/completions", content);
+            response.EnsureSuccessStatusCode();
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(responseBody);
+            return doc.RootElement
+                      .GetProperty("choices")[0]
+                      .GetProperty("message")
+                      .GetProperty("content")
+                      .GetString()
+                      .Trim();
+        }
     }
 }
